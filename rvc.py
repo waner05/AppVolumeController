@@ -94,10 +94,7 @@ def connect():
 
 # Create tray icon image
 def create_image():
-    img = Image.new("RGB", (64, 64), "black")
-    draw = ImageDraw.Draw(img)
-    draw.ellipse((16, 16, 48, 48), fill="white")
-    return img
+    return Image.open("ico.png")
 
 # Hide to tray
 def hide_window():
