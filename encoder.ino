@@ -1,3 +1,6 @@
+#include <Adafruit_GC9A01A.h>
+#include <Adafruit_GFX.h>
+#include <SPI.h>
 #define PINCHANGEINT
 // #define ENABLEPULLUPS   // Uncomment if your encoder has no external pull-ups
 
@@ -37,8 +40,17 @@ void IRAM_ATTR AB_isr() {
 
     if (state & DIR_CW) count++;
     if (state & DIR_CCW) count--;
+
+    count = constrain(count, 0, 100);
 }
 
+#define cs 26
+#define dc 25
+#define rst 27
+#define sck 32
+#define mosi 33
+
+Adafruit_GC9A01A tft(cs, dc, mosi, sck, rst);
 void setup() {
     pinMode(A, INPUT_PULLUP);
     pinMode(B, INPUT_PULLUP);
@@ -51,12 +63,42 @@ void setup() {
 
     Serial.begin(115200);
     Serial.println("Rotary Encoder (State Machine) Initialized");
+
+    tft.begin();
+    tft.fillScreen(GC9A01A_BLACK);
+    tft.setTextColor(GC9A01A_WHITE);
+    tft.setTextSize(4);
+}
+
+void drawRing(int percent) {
+    // Draw a ring arc from -135° to +135°
+    int angleMax = map(percent, 0, 100, 0, 270); // 0–270°
+
+    // Clear only the arc line (by redrawing it black)
+    for (int a = 0; a <= 270; a++) {
+        float angleRad = radians(a - 135);
+        int x = 120 + cos(angleRad) * 100;
+        int y = 120 + sin(angleRad) * 100;
+        tft.drawPixel(x, y, GC9A01A_BLACK);
+    }
+
+    // Draw the current arc in white
+    for (int a = 0; a <= angleMax; a++) {
+        float angleRad = radians(a - 135);
+        int x = 120 + cos(angleRad) * 100;
+        int y = 120 + sin(angleRad) * 100;
+        tft.drawPixel(x, y, GC9A01A_WHITE);
+    }
 }
 
 
 void loop() {
     if (count != old_count) {
         Serial.println(count);
+        tft.fillRect(80, 100, 120, 40,GC9A01A_BLACK);
+        tft.setCursor(80,100);
+        tft.print(count);
+        drawRing(count);
         old_count = count;
     }
 }
