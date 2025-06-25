@@ -32,6 +32,7 @@ def send_volume():
     ctl = apps[selected_app]
     vol = ctl.GetMasterVolume()
     try:
+        ser.write(f"APP:{selected_app}\n".encode())
         ser.write(f"VOL:{int(vol * 100)}\n".encode())
     except:
         pass
