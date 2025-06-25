@@ -40,8 +40,9 @@ void IRAM_ATTR AB_isr() {
 
     if (state & DIR_CW) count++;
     if (state & DIR_CCW) count--;
-}
 
+    count = constrain(count, 0, 100);
+}
 
 #define cs 26
 #define dc 25
@@ -50,6 +51,12 @@ void IRAM_ATTR AB_isr() {
 #define mosi 33
 
 Adafruit_GC9A01A tft(cs, dc, mosi, sck, rst);
+
+#define ICON_WIDTH 64
+#define ICON_HEIGHT 64
+uint16_t iconBuffer[ICON_WIDTH * ICON_HEIGHT];
+bool hasIcon = false;
+
 void setup() {
     pinMode(A, INPUT_PULLUP);
     pinMode(B, INPUT_PULLUP);
@@ -69,13 +76,64 @@ void setup() {
     tft.setTextSize(4);
 }
 
+void drawRing(int percent) {
+    static int prevPercent = -1;
+
+    int anglePrev = map(prevPercent, 0, 100, 0, 270);
+    int angleNow  = map(percent,     0, 100, 0, 270);
+
+    int centerX = 120;
+    int centerY = 120;
+    int innerRadius = 90;
+    int outerRadius = 100;
+
+    // If decreasing: erase segments from angleNow+1 to anglePrev
+    if (angleNow < anglePrev) {
+        for (int a = angleNow + 1; a <= anglePrev; a++) {
+            float angleRad = radians(a - 135);
+            int x0 = centerX + cos(angleRad) * innerRadius;
+            int y0 = centerY + sin(angleRad) * innerRadius;
+            int x1 = centerX + cos(angleRad) * outerRadius;
+            int y1 = centerY + sin(angleRad) * outerRadius;
+            tft.drawLine(x0, y0, x1, y1, GC9A01A_BLACK);
+        }
+    }
+
+    // If increasing: draw new segments from anglePrev+1 to angleNow
+    else if (angleNow > anglePrev) {
+        for (int a = anglePrev + 1; a <= angleNow; a++) {
+            float angleRad = radians(a - 135);
+            int x0 = centerX + cos(angleRad) * innerRadius;
+            int y0 = centerY + sin(angleRad) * innerRadius;
+            int x1 = centerX + cos(angleRad) * outerRadius;
+            int y1 = centerY + sin(angleRad) * outerRadius;
+            tft.drawLine(x0, y0, x1, y1, GC9A01A_WHITE);
+        }
+    }
+
+    prevPercent = percent;
+}
+
+
 
 void loop() {
+
+    if (Serial.available()) {
+        String input = Serial.readStringUntil('\n');
+        input.trim();
+        if (input.startsWith("VOL:")) {
+            count = input.substring(4).toInt();
+            count = constrain(count, 0, 100);
+            old_count = -1; // force refresh
+        }
+    }
+
     if (count != old_count) {
-        Serial.println(count);
         tft.fillRect(80, 100, 120, 40,GC9A01A_BLACK);
-        tft.setCursor(80,100);
+        tft.setCursor(90,100);
         tft.print(count);
+        drawRing(count);
+        Serial.println(count);
         old_count = count;
     }
 }
