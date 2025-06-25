@@ -1,20 +1,22 @@
 #include <Adafruit_GC9A01A.h>
 #include <Adafruit_GFX.h>
 #include <SPI.h>
-#define PINCHANGEINT
-// #define ENABLEPULLUPS   // Uncomment if your encoder has no external pull-ups
+#include <pgmspace.h>
 
+// Icon headers
+#include "spotify_icon.h"
+#include "stock_icon.h"
+#include "discord_icon.h"
 #define DIR_NONE 0x00
 #define DIR_CW   0x10
 #define DIR_CCW  0x20
 
 unsigned int state;
-unsigned int A = 18;             // CLK pin on GPIO 18
-unsigned int B = 19;             // DT pin on GPIO 19
+unsigned int A = 18;
+unsigned int B = 19;
 volatile int count = 0;
-int old_count = 0;
+int old_count = -1;
 
-// State definitions
 #define R_START     0x3
 #define R_CW_BEGIN  0x1
 #define R_CW_NEXT   0x0
@@ -24,24 +26,22 @@ int old_count = 0;
 #define R_CCW_FINAL 0x5
 
 const unsigned char ttable[8][4] = {
-    {R_CW_NEXT,  R_CW_BEGIN,  R_CW_FINAL,  R_START},                // R_CW_NEXT
-    {R_CW_NEXT,  R_CW_BEGIN,  R_CW_BEGIN,  R_START},                // R_CW_BEGIN
-    {R_CW_NEXT,  R_CW_FINAL,  R_CW_FINAL,  R_START | DIR_CW},       // R_CW_FINAL
-    {R_START,    R_CW_BEGIN,  R_CCW_BEGIN, R_START},                // R_START
-    {R_CCW_NEXT, R_CCW_FINAL, R_CCW_BEGIN, R_START},                // R_CCW_NEXT
-    {R_CCW_NEXT, R_CCW_FINAL, R_CCW_FINAL, R_START | DIR_CCW},      // R_CCW_FINAL
-    {R_CCW_NEXT, R_CCW_BEGIN, R_CCW_BEGIN, R_START},                // R_CCW_BEGIN
-    {R_START,    R_START,     R_START,     R_START}                 // ILLEGAL
+  {R_CW_NEXT,  R_CW_BEGIN,  R_CW_FINAL,  R_START},
+  {R_CW_NEXT,  R_CW_BEGIN,  R_CW_BEGIN,  R_START},
+  {R_CW_NEXT,  R_CW_FINAL,  R_CW_FINAL,  R_START | DIR_CW},
+  {R_START,    R_CW_BEGIN,  R_CCW_BEGIN, R_START},
+  {R_CCW_NEXT, R_CCW_FINAL, R_CCW_BEGIN, R_START},
+  {R_CCW_NEXT, R_CCW_FINAL, R_CCW_FINAL, R_START | DIR_CCW},
+  {R_CCW_NEXT, R_CCW_BEGIN, R_CCW_BEGIN, R_START},
+  {R_START,    R_START,     R_START,     R_START}
 };
 
 void IRAM_ATTR AB_isr() {
-    unsigned char pinstate = (digitalRead(A) << 1) | digitalRead(B);
-    state = ttable[state & 0x07][pinstate];
-
-    if (state & DIR_CW) count++;
-    if (state & DIR_CCW) count--;
-
-    count = constrain(count, 0, 100);
+  unsigned char pinstate = (digitalRead(A) << 1) | digitalRead(B);
+  state = ttable[state & 0x07][pinstate];
+  if (state & DIR_CW) count++;
+  if (state & DIR_CCW) count--;
+  count = constrain(count, 0, 100);
 }
 
 #define cs 26
@@ -52,88 +52,95 @@ void IRAM_ATTR AB_isr() {
 
 Adafruit_GC9A01A tft(cs, dc, mosi, sck, rst);
 
-#define ICON_WIDTH 64
-#define ICON_HEIGHT 64
-uint16_t iconBuffer[ICON_WIDTH * ICON_HEIGHT];
+#define ICON_WIDTH 80
+#define ICON_HEIGHT 80
 bool hasIcon = false;
+String currentApp = "";
 
 void setup() {
-    pinMode(A, INPUT_PULLUP);
-    pinMode(B, INPUT_PULLUP);
+  pinMode(A, INPUT_PULLUP);
+  pinMode(B, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(A), AB_isr, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(B), AB_isr, CHANGE);
 
-    attachInterrupt(digitalPinToInterrupt(A), AB_isr, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(B), AB_isr, CHANGE);
-
-    state = (digitalRead(A) << 1) | digitalRead(B);
-    old_count = 0;
-
-    Serial.begin(115200);
-    Serial.println("Rotary Encoder (State Machine) Initialized");
-
-    tft.begin();
-    tft.fillScreen(GC9A01A_BLACK);
-    tft.setTextColor(GC9A01A_WHITE);
-    tft.setTextSize(4);
+  state = (digitalRead(A) << 1) | digitalRead(B);
+  Serial.begin(115200);
+  tft.begin();
+  tft.fillScreen(GC9A01A_BLACK);
+  tft.setTextColor(GC9A01A_WHITE);
+  tft.setTextSize(4);
 }
 
 void drawRing(int percent) {
-    static int prevPercent = -1;
+  static int prevPercent = -1;
+  int anglePrev = map(prevPercent, 0, 100, 0, 270);
+  int angleNow = map(percent, 0, 100, 0, 270);
+  int centerX = 120, centerY = 120;
+  int innerRadius = 90, outerRadius = 100;
 
-    int anglePrev = map(prevPercent, 0, 100, 0, 270);
-    int angleNow  = map(percent,     0, 100, 0, 270);
-
-    int centerX = 120;
-    int centerY = 120;
-    int innerRadius = 90;
-    int outerRadius = 100;
-
-    // If decreasing: erase segments from angleNow+1 to anglePrev
-    if (angleNow < anglePrev) {
-        for (int a = angleNow + 1; a <= anglePrev; a++) {
-            float angleRad = radians(a - 135);
-            int x0 = centerX + cos(angleRad) * innerRadius;
-            int y0 = centerY + sin(angleRad) * innerRadius;
-            int x1 = centerX + cos(angleRad) * outerRadius;
-            int y1 = centerY + sin(angleRad) * outerRadius;
-            tft.drawLine(x0, y0, x1, y1, GC9A01A_BLACK);
-        }
+  if (angleNow < anglePrev) {
+    for (int a = angleNow + 1; a <= anglePrev; a++) {
+      float rad = radians(a - 135);
+      int x0 = centerX + cos(rad) * innerRadius;
+      int y0 = centerY + sin(rad) * innerRadius;
+      int x1 = centerX + cos(rad) * outerRadius;
+      int y1 = centerY + sin(rad) * outerRadius;
+      tft.drawLine(x0, y0, x1, y1, GC9A01A_BLACK);
     }
-
-    // If increasing: draw new segments from anglePrev+1 to angleNow
-    else if (angleNow > anglePrev) {
-        for (int a = anglePrev + 1; a <= angleNow; a++) {
-            float angleRad = radians(a - 135);
-            int x0 = centerX + cos(angleRad) * innerRadius;
-            int y0 = centerY + sin(angleRad) * innerRadius;
-            int x1 = centerX + cos(angleRad) * outerRadius;
-            int y1 = centerY + sin(angleRad) * outerRadius;
-            tft.drawLine(x0, y0, x1, y1, GC9A01A_WHITE);
-        }
+  } else {
+    for (int a = anglePrev + 1; a <= angleNow; a++) {
+      float rad = radians(a - 135);
+      int x0 = centerX + cos(rad) * innerRadius;
+      int y0 = centerY + sin(rad) * innerRadius;
+      int x1 = centerX + cos(rad) * outerRadius;
+      int y1 = centerY + sin(rad) * outerRadius;
+      tft.drawLine(x0, y0, x1, y1, GC9A01A_WHITE);
     }
-
-    prevPercent = percent;
+  }
+  prevPercent = percent;
 }
 
+void drawIconFromApp(String app) {
+  if (app == currentApp) return;
+  currentApp = app;
 
+  const uint16_t* icon = nullptr;
+  if (app.indexOf("Spotify") >= 0) {
+    icon = spotifyIcon;
+  } 
+  else if(app.indexOf("Discord") >= 0){
+    icon = discordIcon;
+  }
+  else{
+    icon = stockIcon;
+  }
+  if (icon) {
+    tft.fillRect(15, 80, ICON_WIDTH, ICON_HEIGHT, GC9A01A_BLACK);
+    tft.drawRGBBitmap(15, 80, icon, ICON_WIDTH, ICON_HEIGHT);
+  }
+}
 
 void loop() {
+  if (Serial.available()) {
+    String line = Serial.readStringUntil('\n');
+    line.trim();
 
-    if (Serial.available()) {
-        String input = Serial.readStringUntil('\n');
-        input.trim();
-        if (input.startsWith("VOL:")) {
-            count = input.substring(4).toInt();
-            count = constrain(count, 0, 100);
-            old_count = -1; // force refresh
-        }
+    if (line.startsWith("VOL:")) {
+      count = line.substring(4).toInt();
+      count = constrain(count, 0, 100);
+      old_count = -1;
+    } else if (line.startsWith("APP:")) {
+      String app = line.substring(4);
+      drawIconFromApp(app);
     }
+  }
 
-    if (count != old_count) {
-        tft.fillRect(95, 144, 93, 30,GC9A01A_BLACK);
-        tft.setCursor(105,144);
-        tft.print(count);
-        drawRing(count);
-        Serial.println(count);
-        old_count = count;
-    }
+  if (count != old_count) {
+    tft.fillRect(105, 104, 93, 30, GC9A01A_BLACK);
+    tft.setCursor(115, 104);
+    tft.print(count);
+    drawRing(count);
+    Serial.println(count);
+    old_count = count;
+  }
 }
