@@ -8,11 +8,12 @@ from PIL import Image, ImageDraw
 import pystray
 import sys
 
-selected_index = 0
-selected_sessions = []
+selected_app = None
 apps = {}
 ser = None
 tray_icon = None
+serial_thread = None
+connected = False
 
 # Get audio sessions
 def get_audio_sessions():
@@ -24,79 +25,95 @@ def get_audio_sessions():
                 found[name] = session._ctl.QueryInterface(ISimpleAudioVolume)
     return found
 
-# Send volume to serial
+# Send current volume to ESP
 def send_volume():
-    global selected_index
-    if not selected_apps:
+    if not selected_app or not ser:
         return
-    ctl = apps[selected_apps[selected_index]]
+    ctl = apps[selected_app]
     vol = ctl.GetMasterVolume()
-    ser.write(f"APP:{selected_apps[selected_index]}\n".encode())
-    ser.write(f"VOL:{int(vol * 100)}\n".encode())
+    try:
+        ser.write(f"VOL:{int(vol * 100)}\n".encode())
+    except:
+        pass
 
-# Handle incoming serial data
+# Handle incoming serial data from ESP
 def handle_serial():
-    global selected_index
-    while True:
-        line = ser.readline().decode().strip()
-        if not line or not selected_apps:
-            continue
+    global connected
+    while connected:
+        try:
+            line = ser.readline().decode().strip()
+            if not line:
+                continue
 
-        ctl = apps[selected_apps[selected_index]]
-        vol = ctl.GetMasterVolume()
+            if selected_app and line.isdigit():
+                volume = int(line)
+                volume = max(0, min(volume, 100))
+                ctl = apps[selected_app]
+                ctl.SetMasterVolume(volume / 100.0, None)
+                # DO NOT send_volume() here — prevents loop
+            elif not selected_app:
+                ser.write("NOAPP\n".encode())
+        except Exception as e:
+            print(f"[Serial error]: {e}")
+            break
 
-        if line == "+1":
-            vol = min(vol + 0.05, 1.0)
-            ctl.SetMasterVolume(vol, None)
-        elif line == "-1":
-            vol = max(vol - 0.05, 0.0)
-            ctl.SetMasterVolume(vol, None)
-        elif line == "BTN":
-            selected_index = (selected_index + 1) % len(selected_apps)
-            print(f"Switched to: {selected_apps[selected_index]}")
-            update_selected_label()
-
-        send_volume()
-
-# Update current app label
+# Update UI label
 def update_selected_label():
-    selected_label.config(text=f"Current: {selected_apps[selected_index]}")
+    if selected_app:
+        selected_label.config(text=f"Current: {selected_app}")
+    else:
+        selected_label.config(text="Current: None")
 
-# Connect to serial and start handler
+# Connect to serial and ESP
 def connect():
-    global ser, selected_apps, apps
+    global ser, selected_app, apps, connected, serial_thread
 
     com_port = com_var.get()
     if not com_port or com_port == "No ports available":
         messagebox.showerror("Error", "Please select a COM port.")
         return
 
-    selected_indices = app_listbox.curselection()
-    if not selected_indices:
-        messagebox.showerror("Error", "Please select up to 3 apps.")
+    selected_index = app_listbox.curselection()
+    if not selected_index:
+        messagebox.showerror("Error", "Please select one app.")
         return
 
-    selected_apps = [app_listbox.get(i) for i in selected_indices[:3]]
-    if len(selected_apps) == 0:
-        messagebox.showerror("Error", "No apps selected.")
-        return
+    selected_app_name = app_listbox.get(selected_index[0])
+    selected_app = selected_app_name
 
     try:
         ser = serial.Serial(com_port, 115200)
+        connected = True
     except:
         messagebox.showerror("Error", f"Failed to open {com_port}")
         return
 
     send_volume()
     update_selected_label()
-    threading.Thread(target=handle_serial, daemon=True).start()
+    serial_thread = threading.Thread(target=handle_serial, daemon=True)
+    serial_thread.start()
     connect_btn.config(state=tk.DISABLED)
+    disconnect_btn.config(state=tk.NORMAL)
 
-# Create tray icon image
+# Disconnect serial and reset state
+def disconnect():
+    global connected, ser, selected_app
+    connected = False
+    if ser:
+        try:
+            ser.close()
+        except:
+            pass
+        ser = None
+    selected_app = None
+    update_selected_label()
+    connect_btn.config(state=tk.NORMAL)
+    disconnect_btn.config(state=tk.DISABLED)
+
+# Tray icon image
 def create_image():
     return Image.open("ico.png")
 
-# Hide to tray
 def hide_window():
     root.withdraw()
     icon = pystray.Icon("VolumeCtrl", create_image(), "Rotary Volume Controller", menu=pystray.Menu(
@@ -107,14 +124,13 @@ def hide_window():
     tray_icon = icon
     threading.Thread(target=icon.run, daemon=True).start()
 
-# Show window from tray
 def show_window(icon=None, item=None):
     root.after(0, root.deiconify)
     if tray_icon:
         tray_icon.stop()
 
-# Quit app from tray
 def quit_app(icon=None, item=None):
+    disconnect()
     if tray_icon:
         tray_icon.stop()
     root.destroy()
@@ -124,40 +140,34 @@ def quit_app(icon=None, item=None):
 root = tk.Tk()
 root.title("Rotary Volume Controller")
 
-# COM Port Selector
 tk.Label(root, text="Select COM Port:").pack()
 ports = [p.device for p in serial.tools.list_ports.comports()]
-
 com_var = tk.StringVar()
 com_dropdown = ttk.Combobox(root, textvariable=com_var, values=ports, state="readonly")
-
 if ports:
-    com_dropdown.current(0)  # Select first port
+    com_dropdown.current(0)
 else:
     com_dropdown.set("No ports available")
-   # com_dropdown.config(state="disabled")
-
 com_dropdown.pack(pady=5)
 
-# App listbox
-tk.Label(root, text="Select up to 3 Applications:").pack()
-app_listbox = tk.Listbox(root, selectmode=tk.MULTIPLE, width=40, height=8)
+tk.Label(root, text="Select an Application:").pack()
+app_listbox = tk.Listbox(root, selectmode=tk.SINGLE, width=40, height=8)
 app_listbox.pack()
 
 apps = get_audio_sessions()
 for name in apps.keys():
     app_listbox.insert(tk.END, name)
 
-# Connect button
 connect_btn = tk.Button(root, text="Connect", command=connect)
-connect_btn.pack(pady=10)
+connect_btn.pack(pady=5)
 
-# Status label
+disconnect_btn = tk.Button(root, text="Disconnect", command=disconnect, state=tk.DISABLED)
+disconnect_btn.pack(pady=5)
+
 selected_label = tk.Label(root, text="Current: None", font=("Arial", 12, "bold"))
 selected_label.pack(pady=5)
 
-# Handle window close
 root.protocol("WM_DELETE_WINDOW", hide_window)
-root.geometry("270x300")
+root.geometry("270x330")
 root.resizable(width=False, height=False)
 root.mainloop()
