@@ -71,25 +71,43 @@ void setup() {
 }
 
 void drawRing(int percent) {
-    // Draw a ring arc from -135° to +135°
-    int angleMax = map(percent, 0, 100, 0, 270); // 0–270°
+    static int prevPercent = -1;
 
-    // Clear only the arc line (by redrawing it black)
-    for (int a = 0; a <= 270; a++) {
-        float angleRad = radians(a - 135);
-        int x = 120 + cos(angleRad) * 100;
-        int y = 120 + sin(angleRad) * 100;
-        tft.drawPixel(x, y, GC9A01A_BLACK);
+    int anglePrev = map(prevPercent, 0, 100, 0, 270);
+    int angleNow  = map(percent,     0, 100, 0, 270);
+
+    int centerX = 120;
+    int centerY = 120;
+    int innerRadius = 90;
+    int outerRadius = 100;
+
+    // If decreasing: erase segments from angleNow+1 to anglePrev
+    if (angleNow < anglePrev) {
+        for (int a = angleNow + 1; a <= anglePrev; a++) {
+            float angleRad = radians(a - 135);
+            int x0 = centerX + cos(angleRad) * innerRadius;
+            int y0 = centerY + sin(angleRad) * innerRadius;
+            int x1 = centerX + cos(angleRad) * outerRadius;
+            int y1 = centerY + sin(angleRad) * outerRadius;
+            tft.drawLine(x0, y0, x1, y1, GC9A01A_BLACK);
+        }
     }
 
-    // Draw the current arc in white
-    for (int a = 0; a <= angleMax; a++) {
-        float angleRad = radians(a - 135);
-        int x = 120 + cos(angleRad) * 100;
-        int y = 120 + sin(angleRad) * 100;
-        tft.drawPixel(x, y, GC9A01A_WHITE);
+    // If increasing: draw new segments from anglePrev+1 to angleNow
+    else if (angleNow > anglePrev) {
+        for (int a = anglePrev + 1; a <= angleNow; a++) {
+            float angleRad = radians(a - 135);
+            int x0 = centerX + cos(angleRad) * innerRadius;
+            int y0 = centerY + sin(angleRad) * innerRadius;
+            int x1 = centerX + cos(angleRad) * outerRadius;
+            int y1 = centerY + sin(angleRad) * outerRadius;
+            tft.drawLine(x0, y0, x1, y1, GC9A01A_WHITE);
+        }
     }
+
+    prevPercent = percent;
 }
+
 
 
 void loop() {
