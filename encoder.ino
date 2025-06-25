@@ -112,11 +112,11 @@ void drawRing(int percent) {
 
 void loop() {
     if (count != old_count) {
-        Serial.println(count);
         tft.fillRect(80, 100, 120, 40,GC9A01A_BLACK);
-        tft.setCursor(80,100);
+        tft.setCursor(90,100);
         tft.print(count);
         drawRing(count);
+        Serial.println(count);
         old_count = count;
     }
 }
