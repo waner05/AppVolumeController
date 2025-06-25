@@ -129,8 +129,8 @@ void loop() {
     }
 
     if (count != old_count) {
-        tft.fillRect(80, 100, 120, 40,GC9A01A_BLACK);
-        tft.setCursor(90,100);
+        tft.fillRect(95, 144, 93, 30,GC9A01A_BLACK);
+        tft.setCursor(105,144);
         tft.print(count);
         drawRing(count);
         Serial.println(count);
