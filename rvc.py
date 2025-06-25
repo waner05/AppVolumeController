@@ -48,8 +48,10 @@ def handle_serial():
             if selected_app and line.isdigit():
                 volume = int(line)
                 volume = max(0, min(volume, 100))
-                ctl = apps[selected_app]
-                ctl.SetMasterVolume(volume / 100.0, None)
+                for session in AudioUtilities.GetAllSessions():
+                    if session.Process and session.Process.name() == selected_app:
+                        ctl = session._ctl.QueryInterface(ISimpleAudioVolume)
+                        ctl.SetMasterVolume(volume / 100.0, None)
                 # DO NOT send_volume() here — prevents loop
             elif not selected_app:
                 ser.write("NOAPP\n".encode())
