@@ -7,6 +7,7 @@
 #include "discord_icon.h"
 #include "stock_icon.h"
 #include "genshin_icon.h"
+#include "msedge_icon.h"
 
 #define A 18
 #define B 19
@@ -64,25 +65,30 @@ void drawRing(int percent) {
   static int prevPercent = -1;
   int anglePrev = map(prevPercent, 0, 100, 0, 270);
   int angleNow  = map(percent,     0, 100, 0, 270);
-  int cx = 120, cy = 120, r1 = 90, r2 = 100;
+  int cx = 120, cy = 120;
+  int rMin = 89;   // slight overdraw inward
+  int rMax = 101;  // slight overdraw outward
+
+  auto drawArcBand = [&](int fromDeg, int toDeg, uint16_t color) {
+    for (float a = fromDeg; a <= toDeg; a += 0.25) {
+      float rad = radians(a - 135);
+      for (int r = rMin; r <= rMax; r++) {
+        int x = round(cx + cos(rad) * r);
+        int y = round(cy + sin(rad) * r);
+        tft.drawPixel(x, y, color);
+      }
+    }
+  };
 
   if (angleNow < anglePrev) {
-    for (int a = angleNow + 1; a <= anglePrev; a++) {
-      float rad = radians(a - 135);
-      int x0 = cx + cos(rad) * r1, y0 = cy + sin(rad) * r1;
-      int x1 = cx + cos(rad) * r2, y1 = cy + sin(rad) * r2;
-      tft.drawLine(x0, y0, x1, y1, GC9A01A_BLACK);
-    }
+    drawArcBand(angleNow + 0.25, anglePrev, GC9A01A_BLACK);  // Erase
   } else {
-    for (int a = anglePrev + 1; a <= angleNow; a++) {
-      float rad = radians(a - 135);
-      int x0 = cx + cos(rad) * r1, y0 = cy + sin(rad) * r1;
-      int x1 = cx + cos(rad) * r2, y1 = cy + sin(rad) * r2;
-      tft.drawLine(x0, y0, x1, y1, GC9A01A_WHITE);
-    }
+    drawArcBand(anglePrev + 0.25, angleNow, GC9A01A_WHITE);  // Draw
   }
+
   prevPercent = percent;
 }
+
 
 void drawIconFromApp(String app) {
   if (app == currentApp || app == "") return;
@@ -92,6 +98,7 @@ void drawIconFromApp(String app) {
   if (app.indexOf("Spotify") >= 0) icon = spotifyIcon;
   else if (app.indexOf("Discord") >= 0) icon = discordIcon;
   else if (app.indexOf("Genshin") >= 0) icon = genshinIcon;
+  else if (app.indexOf("msedge") >= 0) icon = msedgeIcon;
   else icon = stockIcon;
 
   tft.fillRect(15, 80, ICON_WIDTH, ICON_HEIGHT, GC9A01A_BLACK);
