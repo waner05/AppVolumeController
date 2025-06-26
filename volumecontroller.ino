@@ -22,6 +22,7 @@
 #define DIR_NONE 0x00
 #define DIR_CW   0x10
 #define DIR_CCW  0x20
+#define MAX_APPS 3
 
 Adafruit_GC9A01A tft(cs, dc, mosi, sck, rst);
 unsigned int state;
@@ -33,10 +34,13 @@ const unsigned char ttable[8][4] = {
   {4, 5, 6, 3}, {4, 5, 5, 3 | DIR_CCW}, {4, 6, 6, 3}, {3, 3, 3, 3}
 };
 
-String appNames[3] = {"", "", ""};
+String appNames[MAX_APPS] = {"", "", ""};
 int activeApp = 0;
 String currentApp = "";
 bool lastButton = HIGH;
+
+uint16_t iconBuffers[MAX_APPS][ICON_WIDTH * ICON_HEIGHT];
+bool iconLoaded[MAX_APPS] = {false, false, false};
 
 void IRAM_ATTR AB_isr() {
   unsigned char pinstate = (digitalRead(A) << 1) | digitalRead(B);
@@ -45,17 +49,19 @@ void IRAM_ATTR AB_isr() {
   if (state & DIR_CCW) count--;
   count = constrain(count, 0, 100);
 }
+
 void waitForApps() {
-  appNames[0] = "";
-  appNames[1] = "";
-  appNames[2] = "";
+  for (int i = 0; i < MAX_APPS; i++) {
+    appNames[i] = "";
+    iconLoaded[i] = false;
+  }
   prevPercent = -1;
-  
+
   tft.setTextSize(2);
   tft.setTextColor(GC9A01A_WHITE);
   tft.setCursor(20, 120);
   tft.fillScreen(GC9A01A_BLACK);
-  tft.print("Waiting for apps...");
+  tft.print("Configure on app...");
 
   while (appNames[0] == "" && appNames[1] == "" && appNames[2] == "") {
     if (Serial.available()) {
@@ -69,7 +75,7 @@ void waitForApps() {
   }
 
   tft.fillScreen(GC9A01A_BLACK);
-  currentApp = "";  // Force redraw
+  currentApp = "";
   activeApp = 0;
   drawIconFromApp(appNames[activeApp]);
   Serial.printf("APP:%s\n", appNames[activeApp].c_str());
@@ -97,8 +103,8 @@ void drawRing(int percent) {
   int anglePrev = map(prevPercent, 0, 100, 0, 270);
   int angleNow  = map(percent,     0, 100, 0, 270);
   int cx = 120, cy = 120;
-  int rMin = 89;   // slight overdraw inward
-  int rMax = 101;  // slight overdraw outward
+  int rMin = 89;
+  int rMax = 101;
 
   auto drawArcBand = [&](int fromDeg, int toDeg, uint16_t color) {
     for (float a = fromDeg; a <= toDeg; a += 0.25) {
@@ -112,14 +118,13 @@ void drawRing(int percent) {
   };
 
   if (angleNow < anglePrev) {
-    drawArcBand(angleNow + 0.25, anglePrev, GC9A01A_BLACK);  // Erase
+    drawArcBand(angleNow + 0.25, anglePrev, GC9A01A_BLACK);
   } else {
-    drawArcBand(anglePrev + 0.25, angleNow, GC9A01A_WHITE);  // Draw
+    drawArcBand(anglePrev + 0.25, angleNow, GC9A01A_WHITE);
   }
 
   prevPercent = percent;
 }
-
 
 void drawIconFromApp(String app) {
   if (app == currentApp || app == "") return;
@@ -132,29 +137,53 @@ void drawIconFromApp(String app) {
   else if (app.indexOf("msedge") >= 0) icon = msedgeIcon;
   else icon = stockIcon;
 
-  tft.fillRect(15, 80, ICON_WIDTH, ICON_HEIGHT, GC9A01A_BLACK);
-  if (icon) tft.drawRGBBitmap(15, 80, icon, ICON_WIDTH, ICON_HEIGHT);
+  int slot = activeApp;
+  if (!iconLoaded[slot] && icon) {
+    for (int i = 0; i < ICON_WIDTH * ICON_HEIGHT; i++) {
+      iconBuffers[slot][i] = pgm_read_word(&icon[i]);
+    }
+    iconLoaded[slot] = true;
+  }
 
-  tft.fillRect(105, 140, 95, 20, GC9A01A_BLACK);  // clear text area
+  tft.startWrite();
+  tft.setAddrWindow(15, 80, ICON_WIDTH, ICON_HEIGHT);
+  tft.writePixels(iconBuffers[slot], ICON_WIDTH * ICON_HEIGHT);
+  tft.endWrite();
+
+  tft.fillRect(105, 140, 95, 20, GC9A01A_BLACK);
   tft.setTextSize(2);
   tft.setTextColor(GC9A01A_WHITE);
-  tft.setCursor(105, 140);  // adjust if needed
+  tft.setCursor(105, 140);
 
   String cleanName = app;
   if (cleanName.endsWith(".exe")) {
-  cleanName = cleanName.substring(0, cleanName.length() - 4);
+    cleanName = cleanName.substring(0, cleanName.length() - 4);
   }
   if (cleanName.length() > 8) {
-    cleanName = cleanName.substring(0,8);
+    cleanName = cleanName.substring(0, 8);
   }
   tft.print(cleanName);
+}
+
+bool switchApp() {
+  int start = activeApp;
+  for (int i = 1; i <= MAX_APPS; i++) {
+    int next = (start + i) % MAX_APPS;
+    if (appNames[next] != "") {
+      activeApp = next;
+      drawIconFromApp(appNames[activeApp]);
+      Serial.printf("APP:%s\n", appNames[activeApp].c_str());
+      return true;
+    }
+  }
+  return false;
 }
 
 void loop() {
   while (Serial.available()) {
     String line = Serial.readStringUntil('\n');
     line.trim();
-    if(line == "DIS") {
+    if (line == "DIS") {
       waitForApps();
       continue;
     }
@@ -173,16 +202,7 @@ void loop() {
 
   bool button = digitalRead(SW);
   if (lastButton == HIGH && button == LOW) {
-    int next = (activeApp + 1) % 3;
-    while (next != activeApp) {
-      if (appNames[next] != "") {
-        activeApp = next;
-        drawIconFromApp(appNames[activeApp]);
-        Serial.printf("APP:%s\n", appNames[activeApp].c_str());
-        break;
-      }
-      next = (next + 1) % 3;
-    }
+    switchApp();
     delay(300);
   }
   lastButton = button;
