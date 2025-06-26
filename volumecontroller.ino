@@ -27,6 +27,7 @@ Adafruit_GC9A01A tft(cs, dc, mosi, sck, rst);
 unsigned int state;
 volatile int count = 0;
 int old_count = -1;
+int prevPercent = -1;
 const unsigned char ttable[8][4] = {
   {0, 1, 2, 3}, {0, 1, 1, 3}, {0, 2, 2, 3 | DIR_CW}, {3, 1, 6, 3},
   {4, 5, 6, 3}, {4, 5, 5, 3 | DIR_CCW}, {4, 6, 6, 3}, {3, 3, 3, 3}
@@ -44,6 +45,35 @@ void IRAM_ATTR AB_isr() {
   if (state & DIR_CCW) count--;
   count = constrain(count, 0, 100);
 }
+void waitForApps() {
+  appNames[0] = "";
+  appNames[1] = "";
+  appNames[2] = "";
+  prevPercent = -1;
+  
+  tft.setTextSize(2);
+  tft.setTextColor(GC9A01A_WHITE);
+  tft.setCursor(20, 120);
+  tft.fillScreen(GC9A01A_BLACK);
+  tft.print("Waiting for apps...");
+
+  while (appNames[0] == "" && appNames[1] == "" && appNames[2] == "") {
+    if (Serial.available()) {
+      String line = Serial.readStringUntil('\n');
+      line.trim();
+
+      if (line.startsWith("APP0:")) appNames[0] = line.substring(5);
+      else if (line.startsWith("APP1:")) appNames[1] = line.substring(5);
+      else if (line.startsWith("APP2:")) appNames[2] = line.substring(5);
+    }
+  }
+
+  tft.fillScreen(GC9A01A_BLACK);
+  currentApp = "";  // Force redraw
+  activeApp = 0;
+  drawIconFromApp(appNames[activeApp]);
+  Serial.printf("APP:%s\n", appNames[activeApp].c_str());
+}
 
 void setup() {
   pinMode(A, INPUT_PULLUP);
@@ -59,10 +89,11 @@ void setup() {
   tft.fillScreen(GC9A01A_BLACK);
   tft.setTextColor(GC9A01A_WHITE);
   tft.setTextSize(4);
+
+  waitForApps();
 }
 
 void drawRing(int percent) {
-  static int prevPercent = -1;
   int anglePrev = map(prevPercent, 0, 100, 0, 270);
   int angleNow  = map(percent,     0, 100, 0, 270);
   int cx = 120, cy = 120;
@@ -123,7 +154,10 @@ void loop() {
   while (Serial.available()) {
     String line = Serial.readStringUntil('\n');
     line.trim();
-
+    if(line == "DIS") {
+      waitForApps();
+      continue;
+    }
     if (line.startsWith("VOL:")) {
       count = line.substring(4).toInt();
       count = constrain(count, 0, 100);
