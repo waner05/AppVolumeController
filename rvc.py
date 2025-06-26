@@ -64,7 +64,6 @@ def handle_serial():
                     if session.Process and session.Process.name() == app:
                         ctl = session._ctl.QueryInterface(ISimpleAudioVolume)
                         ctl.SetMasterVolume(volume / 100.0, None)
-                        break
 
             elif not selected_apps:
                 ser.write("NOAPP\n".encode())
