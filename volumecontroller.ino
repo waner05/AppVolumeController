@@ -96,6 +96,20 @@ void drawIconFromApp(String app) {
 
   tft.fillRect(15, 80, ICON_WIDTH, ICON_HEIGHT, GC9A01A_BLACK);
   if (icon) tft.drawRGBBitmap(15, 80, icon, ICON_WIDTH, ICON_HEIGHT);
+
+  tft.fillRect(105, 140, 95, 20, GC9A01A_BLACK);  // clear text area
+  tft.setTextSize(2);
+  tft.setTextColor(GC9A01A_WHITE);
+  tft.setCursor(105, 140);  // adjust if needed
+
+  String cleanName = app;
+  if (cleanName.endsWith(".exe")) {
+  cleanName = cleanName.substring(0, cleanName.length() - 4);
+  }
+  if (cleanName.length() > 8) {
+    cleanName = cleanName.substring(0,8);
+  }
+  tft.print(cleanName);
 }
 
 void loop() {
@@ -134,6 +148,7 @@ void loop() {
 
   if (count != old_count) {
     tft.fillRect(105, 104, 93, 30, GC9A01A_BLACK);
+    tft.setTextSize(4);
     tft.setCursor(115, 104);
     tft.print(count);
     drawRing(count);
