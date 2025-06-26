@@ -116,8 +116,9 @@ def connect():
 
     serial_thread = threading.Thread(target=handle_serial, daemon=True)
     serial_thread.start()
-    connect_btn.config(state="disabled")
-    disconnect_btn.config(state="normal")
+    connect_btn.pack_forget()
+    disconnect_btn.pack(pady=5)
+    refresh_apps.config(state="disabled")
 
 def disconnect():
     global connected, ser, selected_apps
@@ -131,9 +132,16 @@ def disconnect():
         ser = None
     selected_apps.clear()
     update_selected_label()
-    connect_btn.config(state="normal")
-    disconnect_btn.config(state="disabled")
+    disconnect_btn.pack_forget()
+    connect_btn.pack(pady=5)
+    refresh_btn.config(state="enabled")
 
+
+def refresh_apps():
+    app_listbox.delete(0, tk.END)
+    new_apps = get_audio_sessions()
+    for name in new_apps.keys():
+        app_listbox.insert("end",name)
 def create_image():
     return Image.open(resource_path("ico.png"))
 
@@ -184,14 +192,21 @@ apps = get_audio_sessions()
 for name in apps.keys():
     app_listbox.insert("end", name)
 
-connect_btn = ttk.Button(root, text="Connect", command=connect, bootstyle="success")
-connect_btn.pack(pady=5)
+# Frame to hold the connect/disconnect button
+conn_frame = ttk.Frame(root)
+conn_frame.pack(pady=5)
 
-disconnect_btn = ttk.Button(root, text="Disconnect", command=disconnect, bootstyle="danger", state="disabled")
-disconnect_btn.pack(pady=5)
+connect_btn = ttk.Button(conn_frame, text="Connect", command=connect, bootstyle="success")
+connect_btn.pack()
+
+disconnect_btn = ttk.Button(conn_frame, text="Disconnect", command=disconnect, bootstyle="danger")
+
+refresh_btn = ttk.Button(root, text="Refresh Apps", command=refresh_apps, bootstyle="info")
+refresh_btn.pack(pady=5)
 
 selected_label = ttk.Label(root, text="Current: None", font=("Arial", 12, "bold"))
 selected_label.pack(pady=5)
+
 
 root.protocol("WM_DELETE_WINDOW", hide_window)
 root.geometry("405x500")
