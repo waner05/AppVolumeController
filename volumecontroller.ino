@@ -27,6 +27,8 @@
 Adafruit_GC9A01A tft(cs, dc, mosi, sck, rst);
 unsigned int state;
 volatile int count = 0;
+volatile bool countChanged = false;
+
 int old_count = -1;
 int prevPercent = -1;
 const unsigned char ttable[8][4] = {
@@ -45,9 +47,17 @@ bool iconLoaded[MAX_APPS] = {false, false, false};
 void IRAM_ATTR AB_isr() {
   unsigned char pinstate = (digitalRead(A) << 1) | digitalRead(B);
   state = ttable[state & 0x07][pinstate];
-  if (state & DIR_CW) count++;
-  if (state & DIR_CCW) count--;
-  count = constrain(count, 0, 100);
+  int newCount = count;
+
+  if (state & DIR_CW) newCount++;
+  if (state & DIR_CCW) newCount--;
+
+  newCount = constrain(newCount, 0, 100);
+
+  if (newCount != count) {
+    count = newCount;
+    countChanged = true;
+  }
 }
 
 void waitForApps() {
@@ -207,13 +217,18 @@ void loop() {
   }
   lastButton = button;
 
-  if (count != old_count) {
+  if (countChanged || count != old_count) {
+    noInterrupts();
+    countChanged = false;
+    int valueToDraw = count;
+    interrupts();
+
     tft.fillRect(105, 104, 93, 30, GC9A01A_BLACK);
     tft.setTextSize(4);
     tft.setCursor(115, 104);
-    tft.print(count);
-    drawRing(count);
-    Serial.printf("VOL:%d\n", count);
-    old_count = count;
+    tft.print(valueToDraw);
+    drawRing(valueToDraw);
+    Serial.printf("VOL:%d\n", valueToDraw);
+    old_count = valueToDraw;
   }
 }
