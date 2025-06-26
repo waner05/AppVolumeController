@@ -6,6 +6,7 @@ from ttkbootstrap.constants import *
 from ttkbootstrap.dialogs import Messagebox
 from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
 from PIL import Image, ImageTk
+from ttkbootstrap.toast import ToastNotification
 import pystray
 import sys
 import tkinter as tk
@@ -147,6 +148,16 @@ def create_image():
 
 def hide_window():
     root.withdraw()
+
+    ToastNotification(
+        title="Volume Controller Minimized to Tray",
+        message="Keep in tray for continued control.",
+        duration=3500,
+        icon="🔊",
+        iconfont="Segoe UI symbol",
+        bootstyle="secondary",
+    ).show_toast()
+
     icon = pystray.Icon("VolumeCtrl", create_image(), "Rotary Volume Controller", menu=pystray.Menu(
         pystray.MenuItem("Manage", show_window),
         pystray.MenuItem("Quit", quit_app)
@@ -206,7 +217,6 @@ refresh_btn.pack(pady=5)
 
 selected_label = ttk.Label(root, text="Current: None", font=("Arial", 12, "bold"))
 selected_label.pack(pady=5)
-
 
 root.protocol("WM_DELETE_WINDOW", hide_window)
 root.geometry("405x500")
