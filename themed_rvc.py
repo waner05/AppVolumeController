@@ -5,10 +5,11 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from ttkbootstrap.dialogs import Messagebox
 from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
-from PIL import Image
+from PIL import Image, ImageTk
 import pystray
 import sys
 import tkinter as tk
+import os, sys
 
 apps = {}
 selected_apps = []
@@ -17,6 +18,11 @@ tray_icon = None
 serial_thread = None
 connected = False
 active_app_index = 0
+
+def resource_path(filename):
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, filename)
+    return filename
 
 def get_audio_sessions():
     found = {}
@@ -129,7 +135,7 @@ def disconnect():
     disconnect_btn.config(state="disabled")
 
 def create_image():
-    return Image.open("ico.png")
+    return Image.open(resource_path("ico.png"))
 
 def hide_window():
     root.withdraw()
@@ -187,8 +193,11 @@ disconnect_btn.pack(pady=5)
 selected_label = ttk.Label(root, text="Current: None", font=("Arial", 12, "bold"))
 selected_label.pack(pady=5)
 
-
 root.protocol("WM_DELETE_WINDOW", hide_window)
 root.geometry("405x500")
 root.resizable(False, False)
+icon_image = Image.open(resource_path("ico.png"))
+tk_icon = ImageTk.PhotoImage(icon_image)
+root.iconphoto(False, tk_icon)
+root.tk_icon_ref = tk_icon
 root.mainloop()
