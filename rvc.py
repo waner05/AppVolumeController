@@ -117,6 +117,7 @@ def disconnect():
     connected = False
     if ser:
         try:
+            ser.write("DIS\n".encode())
             ser.close()
         except:
             pass
@@ -145,6 +146,11 @@ def show_window(icon=None, item=None):
         tray_icon.stop()
 
 def quit_app(icon=None, item=None):
+    if ser and ser.is_open:
+        try:
+            ser.write("DIS\n".encode())
+        except:
+            pass
     disconnect()
     if tray_icon:
         tray_icon.stop()
