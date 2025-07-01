@@ -3,4 +3,4 @@ This project is a volume controller that uses an ESP32 microcontroller, a KY-040
 
 The volume arc is precalculated on setup and kept in a buffer for fast transitions. The active app icons are also cached for fast use.
 
-I lowkey made this so I don't have to tab out of a game to decrease volume of spotify and discord calls
+Will be adding a digital clock for when the computer is turned off/no app connection with different themes.
